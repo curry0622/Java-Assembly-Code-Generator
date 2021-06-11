@@ -32,7 +32,7 @@ run: ${EXEC}.class
 	@java ${EXEC} || java -Xverify:none ${EXEC}
 
 judge: all
-	@python3 ../Compiler_StudentID_HW3/judge/judge.py -v ${v} || printf "or \`make judge v=1\`"
+	@python3 judge/judge.py -v ${v} || printf "or \`make judge v=1\`"
 
 clean:
 	rm -f ${COMPILER} y.tab.* y.output lex.* ${EXEC}.class *.j
