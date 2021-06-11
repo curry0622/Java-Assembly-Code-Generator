@@ -15,6 +15,10 @@ digit [0-9]
 id {letter}+({letter}|{digit})*
 inumber {digit}+
 fnumber ({digit}*\.{digit}+)
+pos_inumber "+"{inumber}
+neg_inumber "-"{inumber}
+pos_fnumber "+"{fnumber}
+neg_fnumber "-"{fnumber}
 newline		[\n]
 
 %x CMT
@@ -30,28 +34,82 @@ newline		[\n]
 <CMT>.      {;}
 "//".*      {;}
 "\""        { BEGIN(STR);
-                return '"';
+                return QUOTA;
             }
 <STR>"\""   { BEGIN(INITIAL);
-                return '"';
+                return QUOTA;
             }
 <STR>[^\"]* { yylval.s_val = strdup(yytext);
                 return STRING_LIT;
             }
-"+"         { return '+'; }
-"-"         { return '-'; }
-"*"         { return '*'; }
+"+"         { return ADD; }
+"-"         { return SUB; }
+"*"         { return MUL; }
+"/"         { return QUO; }
+"%"         { return REM; }
+"++"        { return INC; }
+"--"        { return DEC; }
+">"         { return GTR; }
+"<"         { return LSS; }
+">="        { return GEQ; }
+"<="        { return LEQ; }
+"=="        { return EQL; }
+"!="        { return NEQ; }
+"="         { return ASSIGN; }
+"+="        { return ADD_ASSIGN; }
+"-="        { return SUB_ASSIGN; }
+"*="        { return MUL_ASSIGN; }
+"/="        { return QUO_ASSIGN; }
+"%="        { return REM_ASSIGN; }
+"&&"        { return AND; }
+"||"        { return OR; }
+"!"         { return NOT; }
+"("         { return LPAREN; }
+")"         { return RPAREN; }
+"["         { return LBRACK; }
+"]"         { return RBRACK; }
+"{"         { return LBRACE; }
+"}"         { return RBRACE; }
+","         { return COMMA; }
+";"         { return SEMICOLON; }
 
 "print"     { return PRINT; }
+"return"    { return RETURN; }
+"if"        { return IF; }
+"else"      { return ELSE; }
+"for"       { return FOR; }
+"while"     { return WHILE; }
+"int"       { return INT; }
+"float"     { return FLOAT; }
+"string"    { return STRING; }
+"bool"      { return BOOL; }
+"true"      { return TRUE; }
+"false"     { return FALSE; }
+"continue"  { return CONTINUE; }
+"break"     { return BREAK; }
+"void"      { return VOID; }
 
 {inumber}   { yylval.i_val = atoi(yytext);
                 return INT_LIT;
             }
-
-{id}        { yylval.ctr.id_name = strdup(yytext);
+{fnumber}   { yylval.f_val = atof(yytext);
+                return FLOAT_LIT;
+            }
+{pos_inumber}   { yylval.i_val = atoi(yytext);
+                    return POS_INT_LIT;
+                }
+{neg_inumber}   { yylval.i_val = atoi(yytext);
+                    return NEG_INT_LIT;
+                }
+{pos_fnumber}   { yylval.f_val = atof(yytext);
+                    return POS_FLOAT_LIT;
+                }
+{neg_fnumber}   { yylval.f_val = atof(yytext);
+                    return NEG_FLOAT_LIT;
+                }
+{id}        { yylval.s_val = strdup(yytext);
                 return IDENT;
             }
-[;]         { return SEMICOLON; }
 [\n]        {;}
 <<EOF>>     { static int once = 0;
                 if (once++) {

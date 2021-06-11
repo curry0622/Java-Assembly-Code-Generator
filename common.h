@@ -6,4 +6,13 @@
 #include <string.h>
 #include <stdbool.h>
 
+typedef struct entry {
+  int lineno;
+  int lvl;
+  int addr;
+  char* name;
+  char* type;
+  char* e_type;
+};
+
 #endif /* COMMON_H */
