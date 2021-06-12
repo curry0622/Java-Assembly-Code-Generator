@@ -391,8 +391,8 @@ Literal
         $$ = "int_lit";
     }
     | NEG_INT_LIT {
-        codegen("ldc %d\n", -$<i_val>$);
-        printf("INT_LIT %d\n", -$<i_val>$);
+        codegen("ldc %d\n", $<i_val>$);
+        printf("INT_LIT %d\n", $<i_val>$);
         printf("NEG\n");
         if (debug) printf("Literal -> NEG_INT_LIT\n");
         $$ = "int_lit";
@@ -405,8 +405,8 @@ Literal
         $$ = "float_lit";
     }
     | NEG_FLOAT_LIT {
-        codegen("ldc %f\n", -$<f_val>$);
-        printf("FLOAT_LIT %f\n", -$<f_val>$);
+        codegen("ldc %f\n", $<f_val>$);
+        printf("FLOAT_LIT %f\n", $<f_val>$);
         printf("NEG\n");
         if (debug) printf("Literal -> FLOAT_LIT\n");
         $$ = "float_lit";
