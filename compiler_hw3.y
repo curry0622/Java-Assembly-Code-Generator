@@ -218,7 +218,7 @@ MulExpression
                 codegen("fmul\n");
             }
             if (strcmp($2, "QUO") == 0) {
-                codegen("fquo\n");
+                codegen("fdiv\n");
             }
         } else {
             $$ = "int";
@@ -226,7 +226,7 @@ MulExpression
                 codegen("imul\n");
             }
             if (strcmp($2, "QUO") == 0) {
-                codegen("iquo\n");
+                codegen("idiv\n");
             }
             if (strcmp($2, "REM") == 0) {
                 codegen("irem\n");
@@ -343,7 +343,7 @@ Operand
     }
     | QUOTA STRING_LIT QUOTA {
         if (debug) printf("Operand -> QUOTA STRING_LIT QUOTA\n");
-        codegen("ldc %s\n", $<s_val>2);
+        codegen("ldc \"%s\"\n", $<s_val>2);
         printf("STRING_LIT %s\n", $<s_val>2);
         $$ = "string_lit";
     }
@@ -473,14 +473,24 @@ DeclarationStmt
         if (check_redeclare_err($2)) {
             insert_symbol($2, $1, "-");
             codegen("ldc 0\n");
-            codegen("istore %d\n", curr_addr - 1);
+            if (strcmp($1, "int") == 0) {
+                codegen("istore %d\n", curr_addr - 1);
+            }
+            if (strcmp($1, "float") == 0) {
+                codegen("fstore %d\n", curr_addr - 1);
+            }
         }
     }
     | Type IDENT ASSIGN Expression SEMICOLON {
         if (debug) printf("DeclarationStmt -> Type IDENT ASSIGN Expression SEMICOLON\n");
         if (check_redeclare_err($2)) {
             insert_symbol($2, $1, "-");
-            codegen("istore %d\n", curr_addr - 1);
+            if (strcmp($1, "int") == 0) {
+                codegen("istore %d\n", curr_addr - 1);
+            }
+            if (strcmp($1, "float") == 0) {
+                codegen("fstore %d\n", curr_addr - 1);
+            }
         }
     }
     | Type IDENT LBRACK Expression RBRACK SEMICOLON {
@@ -549,12 +559,12 @@ IncDecExpr
             if (strcmp(table[addr].type, "int") == 0) {
                 codegen("ldc 1\n");
                 codegen("iadd\n");
-                codegen("istore %d\n", 1);
+                codegen("istore %d\n", addr);
             }
             if (strcmp(table[addr].type, "float") == 0) {
-                codegen("ldc 1\n");
+                codegen("ldc 1.0\n");
                 codegen("fadd\n");
-                codegen("istore %d\n", 1);
+                codegen("fstore %d\n", addr);
             }
         }
         printf("INC\n");
@@ -566,12 +576,12 @@ IncDecExpr
             if (strcmp(table[addr].type, "int") == 0) {
                 codegen("ldc 1\n");
                 codegen("isub\n");
-                codegen("istore %d\n", 1);
+                codegen("istore %d\n", addr);
             }
             if (strcmp(table[addr].type, "float") == 0) {
-                codegen("ldc 1\n");
+                codegen("ldc 1.0\n");
                 codegen("fsub\n");
-                codegen("istore %d\n", 1);
+                codegen("fstore %d\n", addr);
             }
         }
         printf("DEC\n");
@@ -669,7 +679,7 @@ PrintStmt
     : PRINT LPAREN Expression RPAREN SEMICOLON {
         if (debug) printf("PrintStmt -> PRINT LPAREN Expression RPAREN SEMICOLON\n");
         printf("PRINT %s\n", type_correction($3));
-        codegen_print($3);
+        codegen_print(type_correction($3));
     }
 ;
 
@@ -883,12 +893,12 @@ void codegen_print(char* type) {
     if (strcmp(type, "int") == 0) {
         codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
         codegen("swap\n");
-        codegen("invokevirtual java/io/PrintStream/println(I)V\n");
+        codegen("invokevirtual java/io/PrintStream/print(I)V\n");
     }
     if (strcmp(type, "float") == 0) {
         codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
         codegen("swap\n");
-        codegen("invokevirtual java/io/PrintStream/println(F)V\n");
+        codegen("invokevirtual java/io/PrintStream/print(F)V\n");
     }
     if (strcmp(type, "string") == 0) {
         codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
