@@ -37,17 +37,36 @@
     /* Symbol table function - you can add new function if needed. */
     static void create_table();
     static void insert_symbol();
-    static char* lookup_symbol();
+    static void renew_symbol();
+    static struct expr_val lookup_symbol();
     static void dump_table();
 
     /* Utils */
-    static void convert_type();
+    static struct expr_val convert_type();
     static void debug_table();
     static bool check_type_err();
     static bool check_op_err();
     static bool check_redeclare_err();
     static char* type_correction();
     static void check_assign_err();
+
+    /* For stacks */
+    int i_stack[100];
+    int i_stack_tos = -1;
+
+    float f_stack[100];
+    int f_stack_tos = -1;
+
+    char* s_stack = "";
+
+    bool b_stack[100];
+    int b_stack_tos = -1;
+
+    // static void i_stack_push();
+    // static int i_stack_pop();
+
+    /* For code generate */
+    static void codegen_print();
 %}
 
 %error-verbose
@@ -60,6 +79,7 @@
     float f_val;
     char *s_val;
     /* ... */
+    struct expr_val e_val;
 }
 /* Token without return */
 %token PRINT RETURN IF ELSE FOR WHILE INT FLOAT STRING BOOL TRUE FALSE CONTINUE BREAK VOID
@@ -73,8 +93,8 @@
 
 /* Nonterminal with return, which need to sepcify type */
 %type <s_val> Type TypeName
-%type <s_val> AddOp MulOp CmpOp UnaryOp AssignOp
-%type <s_val> Expression AndExpression CmpExpression AddExpression MulExpression UnaryExpr PrimaryExpr Operand IndexExpr ConversionExpr Literal
+%type <s_val> AddOp MulOp CmpOp NotOp AssignOp
+%type <e_val> Expression AndExpression CmpExpression AddExpression MulExpression UnaryExpr PrimaryExpr Operand IndexExpr ConversionExpr Literal
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -120,10 +140,13 @@ Expression
         if (debug) {
             printf("Expression -> Expression OR AndExpression\n");
         }
-        check_type_err($1, "OR", $3);
+        check_type_err($1.type, "OR", $3.type);
 
         printf("OR\n");
-        $$ = "bool";
+        struct expr_val ret;
+        ret.type = "bool";
+        ret.b_val = $1.b_val || $3.b_val;
+        $$ = ret;
     }
     | AndExpression {
         if (debug) {
@@ -138,10 +161,13 @@ AndExpression
         if (debug) {
             printf("AndExpression -> AndExpression AND CmpExpression\n");
         }
-        check_type_err($1, "AND", $3);
+        check_type_err($1.type, "AND", $3.type);
 
         printf("AND\n");
-        $$ = "bool";
+        struct expr_val ret;
+        ret.type = "bool";
+        ret.b_val = $1.b_val && $3.b_val;
+        $$ = ret;
     }
     | CmpExpression {
         if (debug) {
@@ -156,10 +182,25 @@ CmpExpression
         if (debug) {
             printf("CmpExpression -> CmpExpression CmpOp AddExpression\n");
         }
-        check_type_err($1, $2, $3);
+        check_type_err($1.type, $2, $3.type);
 
         printf("%s\n", $2);
-        $$ = "bool";
+        struct expr_val ret;
+        ret.type = "bool";
+        if (strcmp($2, "EQL") == 0) {
+            ret.b_val = $1.b_val == $3.b_val;
+        } else if (strcmp($2, "NEQ") == 0) {
+            ret.b_val = $1.b_val != $3.b_val;
+        } else if (strcmp($2, "LSS") == 0) {
+            ret.b_val = $1.b_val < $3.b_val;
+        } else if (strcmp($2, "LEQ") == 0) {
+            ret.b_val = $1.b_val <= $3.b_val;
+        } else if (strcmp($2, "GTR") == 0) {
+            ret.b_val = $1.b_val > $3.b_val;
+        } else {
+            ret.b_val = $1.b_val >= $3.b_val;
+        }
+        $$ = ret;
     }
     | AddExpression {
         if (debug) {
@@ -174,12 +215,28 @@ AddExpression
         if (debug) {
             printf("AddExpression -> AddExpression AddOp MulExpression\n");
         }
-        check_type_err($1, $2, $3);
+        check_type_err($1.type, $2, $3.type);
+
         printf("%s\n", $2);
-        if (strcmp(type_correction($1), "float") == 0 || strcmp(type_correction($3), "float") == 0) {
-            $$ = "float";
-        } else {
-            $$ = "int";
+        if (strcmp(type_correction($1.type), "float") == 0 && strcmp(type_correction($3.type), "float") == 0) {
+            struct expr_val ret;
+            ret.type = "float";
+            if (strcmp($2, "ADD") == 0) {
+                ret.f_val = $1.f_val + $3.f_val;
+            } else {
+                ret.f_val = $1.f_val - $3.f_val;
+            }
+            $$ = ret;
+        }
+        if (strcmp(type_correction($1.type), "int") == 0 && strcmp(type_correction($3.type), "int") == 0) {
+            struct expr_val ret;
+            ret.type = "int";
+            if (strcmp($2, "ADD") == 0) {
+                ret.i_val = $1.i_val + $3.i_val;
+            } else {
+                ret.i_val = $1.i_val - $3.i_val;
+            }
+            $$ = ret;
         }
     }
     | MulExpression {
@@ -195,12 +252,36 @@ MulExpression
         if (debug) {
             printf("MulExpression -> MulExpression MulOp UnaryExpr\n");
         }
-        check_type_err($1, $2, $3);
+        bool err = check_type_err($1.type, $2, $3.type);
+
         printf("%s\n", $2);
-        if (strcmp(type_correction($1), "float") == 0 || strcmp(type_correction($3), "float") == 0) {
-            $$ = "float";
-        } else {
-            $$ = "int";
+        // if no error
+        if (!err) {
+            if (strcmp(type_correction($1), "float") == 0 && strcmp(type_correction($3), "float") == 0) {
+                struct expr_val ret;
+                ret.type = "float";
+                if (strcmp($2, "MUL") == 0) {
+                    ret.f_val = $1.f_val * $3.f_val;
+                } else if (strcmp($2, "QUO") == 0) {
+                    ret.f_val = $1.f_val / $3.f_val;
+                }
+                // else {
+                //     ret.f_val = $1.f_val % $3.f_val;
+                // }
+                $$ = ret;
+            }
+            if (strcmp(type_correction($1), "int") == 0 && strcmp(type_correction($3), "int") == 0) {
+                struct expr_val ret;
+                ret.type = "int";
+                if (strcmp($2, "MUL") == 0) {
+                    ret.i_val = $1.i_val * $3.i_val;
+                } else if (strcmp($2, "QUO") == 0) {
+                    ret.i_val = $1.i_val / $3.i_val;
+                } else {
+                    ret.i_val = $1.i_val % $3.i_val;
+                }
+                $$ = ret;
+            }
         }
     }
     | UnaryExpr {
@@ -216,10 +297,13 @@ UnaryExpr
         if (debug) printf("UnaryExpr -> PrimaryExpr\n");
         $$ = $1;
     }
-    | UnaryOp UnaryExpr {
-        if (debug) printf("UnaryExpr -> UnaryOp UnaryExpr\n");
+    | NotOp UnaryExpr {
+        if (debug) printf("UnaryExpr -> NotOp UnaryExpr\n");
         printf("%s\n", $1);
-        $$ = $2;
+        struct expr_val ret;
+        ret = $2;
+        ret.b_val = !ret.b_val;
+        $$ = ret;
     }
 ;
 
@@ -276,19 +360,23 @@ MulOp
     }
 ;
 
-UnaryOp
-    : ADD {
-        if (debug) printf("UnaryOp -> ADD\n");
-        $$ = "POS";
-    }
-    | SUB {
-        if (debug) printf("UnaryOp -> SUB\n");
-        $$ = "NEG";
-    }
-    | NOT {
-        if (debug) printf("UnaryOp -> NOT\n");
+NotOp
+    : NOT {
+        if (debug) printf("NotOp -> NOT\n");
         $$ = "NOT";
     }
+    // : ADD {
+    //     if (debug) printf("UnaryOp -> ADD\n");
+    //     $$ = "POS";
+    // }
+    // | SUB {
+    //     if (debug) printf("UnaryOp -> SUB\n");
+    //     $$ = "NEG";
+    // }
+    // | NOT {
+    //     if (debug) printf("UnaryOp -> NOT\n");
+    //     $$ = "NOT";
+    // }
 ;
 
 PrimaryExpr
@@ -314,12 +402,14 @@ Operand
     | QUOTA STRING_LIT QUOTA {
         if (debug) printf("Operand -> QUOTA STRING_LIT QUOTA\n");
         printf("STRING_LIT %s\n", $<s_val>2);
-        $$ = "string_lit";
+        struct expr_val ret;
+        ret.type = "string_lit";
+        ret.s_val = $<s_val>2;
+        $$ = ret;
     }
     | IDENT {
-        char* type = strdup(lookup_symbol($1));
         if (debug) printf("Operand -> IDENT\n");
-        $$ = type;
+        $$ = lookup_symbol($1);
     }
     | LPAREN Expression RPAREN {
         if (debug) printf("Operand -> LPAREN Expression RPAREN\n");
@@ -329,52 +419,77 @@ Operand
 
 Literal
     : INT_LIT {
-        printf("INT_LIT %d\n", $<i_val>$);
         if (debug) printf("Literal -> INT_LIT\n");
-        $$ = "int_lit";
+        printf("INT_LIT %d\n", $<i_val>$);
+        struct expr_val ret;
+        ret.type = "int_lit";
+        ret.i_val = $<i_val>$;
+        $$ = ret;
     }
     | FLOAT_LIT {
-        printf("FLOAT_LIT %f\n", $<f_val>$);
         if (debug) printf("Literal -> FLOAT_LIT\n");
-        $$ = "float_lit";
+        printf("FLOAT_LIT %f\n", $<f_val>$);
+        struct expr_val ret;
+        ret.type = "float_lit";
+        ret.f_val = $<f_val>$;
+        $$ = ret;
     }
     | TRUE {
-        printf("TRUE\n");
         if (debug) printf("Literal -> TRUE\n");
-        $$ = "bool_lit";
+        printf("TRUE\n");
+        struct expr_val ret;
+        ret.type = "bool_lit";
+        ret.b_val = true;
+        $$ = ret;
     }
     | FALSE {
-        printf("FALSE\n");
         if (debug) printf("Literal -> FALSE\n");
-        $$ = "bool_lit";
+        printf("FALSE\n");
+        struct expr_val ret;
+        ret.type = "bool_lit";
+        ret.b_val = false;
+        $$ = ret;
     }
     | POS_INT_LIT {
+        if (debug) printf("Literal -> POS_INT_LIT\n");
         printf("INT_LIT %d\n", $<i_val>$);
         printf("POS\n");
-        if (debug) printf("Literal -> POS_INT_LIT\n");
-        $$ = "int_lit";
+        struct expr_val ret;
+        ret.type = "int_lit";
+        ret.i_val = $<i_val>$;
+        $$ = ret;
     }
     | NEG_INT_LIT {
+        if (debug) printf("Literal -> NEG_INT_LIT\n");
         printf("INT_LIT %d\n", -$<i_val>$);
         printf("NEG\n");
-        if (debug) printf("Literal -> NEG_INT_LIT\n");
-        $$ = "int_lit";
+        struct expr_val ret;
+        ret.type = "int_lit";
+        ret.i_val = -$<i_val>$;
+        $$ = ret;
     }
     | POS_FLOAT_LIT {
+        if (debug) printf("Literal -> FLOAT_LIT\n");
         printf("FLOAT_LIT %f\n", $<f_val>$);
         printf("POS\n");
-        if (debug) printf("Literal -> FLOAT_LIT\n");
-        $$ = "float_lit";
+        struct expr_val ret;
+        ret.type = "float_lit";
+        ret.f_val = $<f_val>$;
+        $$ = ret;
     }
     | NEG_FLOAT_LIT {
+        if (debug) printf("Literal -> FLOAT_LIT\n");
         printf("FLOAT_LIT %f\n", -$<f_val>$);
         printf("NEG\n");
-        if (debug) printf("Literal -> FLOAT_LIT\n");
-        $$ = "float_lit";
+        struct expr_val ret;
+        ret.type = "float_lit";
+        ret.f_val = -$<f_val>$;
+        $$ = ret;
     }
 ;
 
 IndexExpr
+    // will cause problems
     : PrimaryExpr LBRACK Expression RBRACK {
         if (debug) printf("IndexExpr -> PrimaryExpr LBRACK Expression RBRACK\n");
         $$ = $1;
@@ -384,8 +499,7 @@ IndexExpr
 ConversionExpr
     : LPAREN Type RPAREN Expression {
         if (debug) printf("ConversionExpr -> Type LPAREN Expression RPAREN\n");
-        convert_type($4, $2);
-        $$ = $2;
+        $$ = convert_type($4, $2);
     }
 ;
 
@@ -436,8 +550,10 @@ DeclarationStmt
     }
     | Type IDENT ASSIGN Expression SEMICOLON {
         if (debug) printf("DeclarationStmt -> Type IDENT ASSIGN Expression SEMICOLON\n");
-        if (check_redeclare_err($2))
+        if (check_redeclare_err($2)) {
             insert_symbol($2, $1, "-");
+            renew_symbol(curr_addr - 1, $4);
+        }
     }
     | Type IDENT LBRACK Expression RBRACK SEMICOLON {
         if (debug) printf("DeclarationStmt -> Type IDENT LBRACK Expression RBRACK SEMICOLON\n");
@@ -458,6 +574,10 @@ AssignmentExpr
         check_type_err($1, $2, $3);
         check_assign_err($1, $3);
         printf("%s\n", $2);
+        // may cause problem because of undefined variable
+        if ($1.addr != -1) {
+            renew_symbol($1.addr, $3);
+        }
     }
 ;
 
@@ -606,8 +726,7 @@ PrintStmt
 %%
 
 /* C code section */
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     if (argc == 2) {
         yyin = fopen(argv[1], "r");
     } else {
@@ -642,6 +761,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+/* For symbol table */
 void create_table() {
     curr_lvl += 1;
 }
@@ -657,7 +777,30 @@ void insert_symbol(char* name, char* type, char* e_type) {
     printf("> Insert {%s} into symbol table (scope level: %d)\n", name, curr_lvl);
 }
 
-char* lookup_symbol(char* name) {
+void renew_symbol(int addr, struct expr_val new_val) {
+    // type correct
+    if (strcmp(table[addr].type, new_val.type) == 0) {
+        if (strcmp(table[addr].type, "int") == 0) {
+            table[addr].i_val = new_val.i_val;
+        }
+        if (strcmp(table[addr].type, "float") == 0) {
+            table[addr].f_val = new_val.f_val;
+        }
+        if (strcmp(table[addr].type, "string") == 0) {
+            table[addr].s_val = new_val.s_val;
+        }
+        if (strcmp(table[addr].type, "bool") == 0) {
+            table[addr].b_val = new_val.b_val;
+        }
+    } else {
+        printf("Why is this type error happenning\n");
+    }
+}
+
+// void insert_symbol_i(char* name, ) {}
+
+struct expr_val lookup_symbol(char* name) {
+    struct expr_val ret;
     for (int lvl = curr_lvl; lvl >= 0; lvl--) {
         for (int i = 0; i < curr_addr; i++) {
             if (
@@ -665,14 +808,28 @@ char* lookup_symbol(char* name) {
                 && strcmp(table[i].name, name) == 0
             ) {
                 printf("IDENT (name=%s, address=%d)\n", name, i);
-                if (strcmp(table[i].type, "array") == 0)
-                    return table[i].e_type;
-                return table[i].type;
+                ret.addr = i;
+                ret.type = table[i].type;
+                if (strcmp(ret.type, "int") == 0 || strcmp(ret.type, "int_lit") == 0) {
+                    ret.i_val = table[i].i_val;
+                } else if (strcmp(ret.type, "float") == 0 || strcmp(ret.type, "float_lit") == 0) {
+                    ret.f_val = table[i].f_val;
+                } else if (strcmp(ret.type, "string") == 0 || strcmp(ret.type, "string_lit") == 0) {
+                    ret.s_val = table[i].s_val;
+                } else if (strcmp(ret.type, "bool") == 0 || strcmp(ret.type, "bool_lit") == 0) {
+                    ret.b_val = table[i].b_val;
+                } else {
+                    // array
+                }
+                // if (strcmp(table[i].type, "array") == 0)
+                //     return table[i].e_type;
+                return ret;
             }
         }
     }
+    ret.type = "undefined";
     printf("error:%d: undefined: %s\n", yylineno, name);
-    return "undefined";
+    return ret;
 }
 
 void dump_table() {
@@ -688,30 +845,40 @@ void dump_table() {
     curr_lvl -= 1;
 }
 
-void convert_type(char* from, char* to) {
-    from = type_correction(from);
+/* Utils */
+struct expr_val convert_type(struct expr_val initial, char* to) {
+    char* from = type_correction(initial.type);
     to = type_correction(to);
-    char* from_abrv = "";
-    char* to_abrv = "";
     if (strcmp(from, "int") == 0) {
-        from_abrv = "I";
+        from = "I";
     } else if (strcmp(from, "float") == 0) {
-        from_abrv = "F";
-    } else if (strcmp(from, "string") == 0) {
-        from_abrv = "S";
-    } else {
-        from_abrv = "B";
+        from = "F";
     }
+    // else if (strcmp(from, "string") == 0) {
+    //     from = "S";
+    // } else {
+    //     from = "B";
+    // }
     if (strcmp(to, "int") == 0) {
-        to_abrv = "I";
+        to = "I";
+        initial.type = "int";
     } else if (strcmp(to, "float") == 0) {
-        to_abrv = "F";
-    } else if (strcmp(to, "string") == 0) {
-        to_abrv = "S";
-    } else {
-        to_abrv = "B";
+        to = "F";
+        initial.type = "float";
     }
-    printf("%s to %s\n", from_abrv, to_abrv);
+    // else if (strcmp(to, "string") == 0) {
+    //     to = "S";
+    // } else {
+    //     to = "B";
+    // }
+    if (strcmp(from, "I") == 0 && strcmp(to, "F") == 0) {
+        initial.f_val = (float)initial.i_val;
+    }
+    if (strcmp(from, "F") == 0 && strcmp(to, "I") == 0) {
+        initial.i_val = (int)initial.f_val;
+    }
+    printf("%s to %s\n", from, to);
+    return initial;
 }
 
 void debug_table() {
@@ -799,4 +966,21 @@ void check_assign_err(char* left, char* right) {
     ) {
         printf("error:%d: cannot assign to %s\n", yylineno, type_correction(left));
     }
+}
+
+/* For stack operations */
+// void i_stack_push(int val) {
+//     i_stack[++i_stack_tos] = val;
+// }
+
+// int i_stack_pop() {
+//     return i_stack[i_stack_tos--];
+// }
+
+/* For code generate */
+void codegen_print() {
+    codegen("ldc 30\n");
+    codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+    codegen("swap\n");
+    codegen("invokevirtual java/io/PrintStream/println(I)V\n");
 }
