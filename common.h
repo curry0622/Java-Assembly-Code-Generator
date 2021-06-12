@@ -6,7 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-typedef struct entry {
+struct entry {
   int lineno;
   int lvl;
   int addr;
