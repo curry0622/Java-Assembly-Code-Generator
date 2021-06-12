@@ -20,6 +20,7 @@
     FILE *fout = NULL;
     bool HAS_ERROR = false;
     int INDENT = 0;
+    int label_cnt = 0;
 
     void yyerror (char const *s)
     {
@@ -127,6 +128,7 @@ Expression
 
         printf("OR\n");
         $$ = "bool";
+        codegen("ior\n");
     }
     | AndExpression {
         if (debug) {
@@ -145,6 +147,7 @@ AndExpression
 
         printf("AND\n");
         $$ = "bool";
+        codegen("iand\n");
     }
     | CmpExpression {
         if (debug) {
@@ -163,6 +166,34 @@ CmpExpression
 
         printf("%s\n", $2);
         $$ = "bool";
+        if (
+            strcmp(type_correction($1), "int") == 0
+            && strcmp(type_correction($3), "int") == 0
+        ) {
+            if (strcmp($2, "GTR") == 0) {
+                codegen("isub\n");
+                codegen("ifgt label_%d\n", label_cnt++);
+                codegen("iconst_0\n");
+                codegen("goto label_%d\n", label_cnt++);
+                codegen("label_%d:\n", label_cnt - 2);
+                codegen("iconst_1\n");
+                codegen("label_%d:\n", label_cnt - 1);
+            }
+        }
+        if (
+            strcmp(type_correction($1), "float") == 0
+            && strcmp(type_correction($3), "float") == 0
+        ) {
+            if (strcmp($2, "GTR") == 0) {
+                codegen("fcmpl\n");
+                codegen("ifgt label_%d\n", label_cnt++);
+                codegen("iconst_0\n");
+                codegen("goto label_%d\n", label_cnt++);
+                codegen("label_%d:\n", label_cnt - 2);
+                codegen("iconst_1\n");
+                codegen("label_%d:\n", label_cnt - 1);
+            }
+        }
     }
     | AddExpression {
         if (debug) {
@@ -250,6 +281,10 @@ UnaryExpr
         if (debug) printf("UnaryExpr -> UnaryOp UnaryExpr\n");
         printf("%s\n", $1);
         $$ = $2;
+        if (strcmp($1, "NOT") == 0) {
+            codegen("iconst_1\n");
+            codegen("ixor\n");
+        }
     }
 ;
 
@@ -318,6 +353,7 @@ UnaryOp
     | NOT {
         if (debug) printf("UnaryOp -> NOT\n");
         $$ = "NOT";
+        // codegen("ixor\n");
     }
 ;
 
@@ -562,7 +598,7 @@ IncDecExpr
                 codegen("istore %d\n", addr);
             }
             if (strcmp(table[addr].type, "float") == 0) {
-                codegen("ldc 1.0\n");
+                codegen("ldc 1.000000\n");
                 codegen("fadd\n");
                 codegen("fstore %d\n", addr);
             }
@@ -579,7 +615,7 @@ IncDecExpr
                 codegen("istore %d\n", addr);
             }
             if (strcmp(table[addr].type, "float") == 0) {
-                codegen("ldc 1.0\n");
+                codegen("ldc 1.000000\n");
                 codegen("fsub\n");
                 codegen("fstore %d\n", addr);
             }
@@ -901,6 +937,17 @@ void codegen_print(char* type) {
         codegen("invokevirtual java/io/PrintStream/print(F)V\n");
     }
     if (strcmp(type, "string") == 0) {
+        codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+        codegen("swap\n");
+        codegen("invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+    }
+    if (strcmp(type, "bool") == 0) {
+        codegen("ifne label_%d\n", label_cnt++);
+        codegen("ldc \"false\"\n");
+        codegen("goto label_%d\n", label_cnt++);
+        codegen("label_%d:\n", label_cnt - 2);
+        codegen("ldc \"true\"\n");
+        codegen("label_%d:\n", label_cnt - 1);
         codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
         codegen("swap\n");
         codegen("invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
