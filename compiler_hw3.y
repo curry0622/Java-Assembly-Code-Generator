@@ -37,7 +37,7 @@
     /* Symbol table function - you can add new function if needed. */
     static void create_table();
     static void insert_symbol();
-    static char* lookup_symbol();
+    static int lookup_symbol();
     static void dump_table();
 
     /* Utils */
@@ -48,6 +48,9 @@
     static bool check_redeclare_err();
     static char* type_correction();
     static void check_assign_err();
+
+    /* Code generate */
+    static void codegen_print();
 %}
 
 %error-verbose
@@ -178,8 +181,20 @@ AddExpression
         printf("%s\n", $2);
         if (strcmp(type_correction($1), "float") == 0 || strcmp(type_correction($3), "float") == 0) {
             $$ = "float";
+            if (strcmp($2, "ADD") == 0) {
+                codegen("fadd\n");
+            }
+            if (strcmp($2, "SUB") == 0) {
+                codegen("fsub\n");
+            }
         } else {
             $$ = "int";
+            if (strcmp($2, "ADD") == 0) {
+                codegen("iadd\n");
+            }
+            if (strcmp($2, "SUB") == 0) {
+                codegen("isub\n");
+            }
         }
     }
     | MulExpression {
@@ -199,8 +214,23 @@ MulExpression
         printf("%s\n", $2);
         if (strcmp(type_correction($1), "float") == 0 || strcmp(type_correction($3), "float") == 0) {
             $$ = "float";
+            if (strcmp($2, "MUL") == 0) {
+                codegen("fmul\n");
+            }
+            if (strcmp($2, "QUO") == 0) {
+                codegen("fquo\n");
+            }
         } else {
             $$ = "int";
+            if (strcmp($2, "MUL") == 0) {
+                codegen("imul\n");
+            }
+            if (strcmp($2, "QUO") == 0) {
+                codegen("iquo\n");
+            }
+            if (strcmp($2, "REM") == 0) {
+                codegen("irem\n");
+            }
         }
     }
     | UnaryExpr {
@@ -313,13 +343,14 @@ Operand
     }
     | QUOTA STRING_LIT QUOTA {
         if (debug) printf("Operand -> QUOTA STRING_LIT QUOTA\n");
+        codegen("ldc %s\n", $<s_val>2);
         printf("STRING_LIT %s\n", $<s_val>2);
         $$ = "string_lit";
     }
     | IDENT {
-        char* type = strdup(lookup_symbol($1));
+        int addr = lookup_symbol($1);
         if (debug) printf("Operand -> IDENT\n");
-        $$ = type;
+        $$ = addr != -1 ? table[addr].type : "undefined";
     }
     | LPAREN Expression RPAREN {
         if (debug) printf("Operand -> LPAREN Expression RPAREN\n");
@@ -329,44 +360,52 @@ Operand
 
 Literal
     : INT_LIT {
+        codegen("ldc %d\n", $<i_val>$);
         printf("INT_LIT %d\n", $<i_val>$);
         if (debug) printf("Literal -> INT_LIT\n");
         $$ = "int_lit";
     }
     | FLOAT_LIT {
+        codegen("ldc %f\n", $<f_val>$);
         printf("FLOAT_LIT %f\n", $<f_val>$);
         if (debug) printf("Literal -> FLOAT_LIT\n");
         $$ = "float_lit";
     }
     | TRUE {
+        codegen("iconst_1\n");
         printf("TRUE\n");
         if (debug) printf("Literal -> TRUE\n");
         $$ = "bool_lit";
     }
     | FALSE {
+        codegen("iconst_0\n");
         printf("FALSE\n");
         if (debug) printf("Literal -> FALSE\n");
         $$ = "bool_lit";
     }
     | POS_INT_LIT {
+        codegen("ldc %d\n", $<i_val>$);
         printf("INT_LIT %d\n", $<i_val>$);
         printf("POS\n");
         if (debug) printf("Literal -> POS_INT_LIT\n");
         $$ = "int_lit";
     }
     | NEG_INT_LIT {
+        codegen("ldc %d\n", -$<i_val>$);
         printf("INT_LIT %d\n", -$<i_val>$);
         printf("NEG\n");
         if (debug) printf("Literal -> NEG_INT_LIT\n");
         $$ = "int_lit";
     }
     | POS_FLOAT_LIT {
+        codegen("ldc %f\n", $<f_val>$);
         printf("FLOAT_LIT %f\n", $<f_val>$);
         printf("POS\n");
         if (debug) printf("Literal -> FLOAT_LIT\n");
         $$ = "float_lit";
     }
     | NEG_FLOAT_LIT {
+        codegen("ldc %f\n", -$<f_val>$);
         printf("FLOAT_LIT %f\n", -$<f_val>$);
         printf("NEG\n");
         if (debug) printf("Literal -> FLOAT_LIT\n");
@@ -431,18 +470,26 @@ ExpressionStmt
 DeclarationStmt
     : Type IDENT SEMICOLON {
         if (debug) printf("DeclarationStmt -> Type IDENT SEMICOLON\n");
-        if (check_redeclare_err($2))
+        if (check_redeclare_err($2)) {
             insert_symbol($2, $1, "-");
+            codegen("ldc 0\n");
+            codegen("istore %d\n", curr_addr - 1);
+        }
     }
     | Type IDENT ASSIGN Expression SEMICOLON {
         if (debug) printf("DeclarationStmt -> Type IDENT ASSIGN Expression SEMICOLON\n");
-        if (check_redeclare_err($2))
+        if (check_redeclare_err($2)) {
             insert_symbol($2, $1, "-");
+            codegen("istore %d\n", curr_addr - 1);
+        }
     }
     | Type IDENT LBRACK Expression RBRACK SEMICOLON {
         if (debug) printf("DeclarationStmt -> Type IDENT LBRACK Expression RBRACK SEMICOLON\n");
-        if (check_redeclare_err($2))
+        if (check_redeclare_err($2)) {
             insert_symbol($2, "array", $1);
+            codegen("newarray %s", $1);
+            codegen("astore %d\n", curr_addr - 1);
+        }
     }
 ;
 
@@ -496,15 +543,37 @@ IncDecStmt
 
 IncDecExpr
     : IDENT INC {
-        lookup_symbol($1);
         if (debug) printf("IncDecExpr -> IDENT INC\n");
-        if (debug) printf("IDENT (name=%s, address=0)\n", $1);
+        int addr = lookup_symbol($1);
+        if (addr != -1) {
+            if (strcmp(table[addr].type, "int") == 0) {
+                codegen("ldc 1\n");
+                codegen("iadd\n");
+                codegen("istore %d\n", 1);
+            }
+            if (strcmp(table[addr].type, "float") == 0) {
+                codegen("ldc 1\n");
+                codegen("fadd\n");
+                codegen("istore %d\n", 1);
+            }
+        }
         printf("INC\n");
     }
     | IDENT DEC {
-        lookup_symbol($1);
         if (debug) printf("IncDecExpr -> IDENT DEC\n");
-        if (debug) printf("IDENT (name=%s, address=0)\n", $1);
+        int addr = lookup_symbol($1);
+        if (addr != -1) {
+            if (strcmp(table[addr].type, "int") == 0) {
+                codegen("ldc 1\n");
+                codegen("isub\n");
+                codegen("istore %d\n", 1);
+            }
+            if (strcmp(table[addr].type, "float") == 0) {
+                codegen("ldc 1\n");
+                codegen("fsub\n");
+                codegen("istore %d\n", 1);
+            }
+        }
         printf("DEC\n");
     }
 ;
@@ -600,6 +669,7 @@ PrintStmt
     : PRINT LPAREN Expression RPAREN SEMICOLON {
         if (debug) printf("PrintStmt -> PRINT LPAREN Expression RPAREN SEMICOLON\n");
         printf("PRINT %s\n", type_correction($3));
+        codegen_print($3);
     }
 ;
 
@@ -657,7 +727,7 @@ void insert_symbol(char* name, char* type, char* e_type) {
     printf("> Insert {%s} into symbol table (scope level: %d)\n", name, curr_lvl);
 }
 
-char* lookup_symbol(char* name) {
+int lookup_symbol(char* name) {
     for (int lvl = curr_lvl; lvl >= 0; lvl--) {
         for (int i = 0; i < curr_addr; i++) {
             if (
@@ -665,14 +735,21 @@ char* lookup_symbol(char* name) {
                 && strcmp(table[i].name, name) == 0
             ) {
                 printf("IDENT (name=%s, address=%d)\n", name, i);
-                if (strcmp(table[i].type, "array") == 0)
-                    return table[i].e_type;
-                return table[i].type;
+                if (strcmp(table[i].type, "int") == 0) {
+                    codegen("iload %d\n", table[i].addr);
+                }
+                if (strcmp(table[i].type, "float") == 0) {
+                    codegen("fload %d\n", table[i].addr);
+                }
+                return i;
+                // if (strcmp(table[i].type, "array") == 0)
+                //     return table[i].e_type;
+                // return table[i].type;
             }
         }
     }
     printf("error:%d: undefined: %s\n", yylineno, name);
-    return "undefined";
+    return -1;
 }
 
 void dump_table() {
@@ -798,5 +875,24 @@ void check_assign_err(char* left, char* right) {
         || strcmp(left, "bool_lit") == 0
     ) {
         printf("error:%d: cannot assign to %s\n", yylineno, type_correction(left));
+    }
+}
+
+/* For code generation */
+void codegen_print(char* type) {
+    if (strcmp(type, "int") == 0) {
+        codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+        codegen("swap\n");
+        codegen("invokevirtual java/io/PrintStream/println(I)V\n");
+    }
+    if (strcmp(type, "float") == 0) {
+        codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+        codegen("swap\n");
+        codegen("invokevirtual java/io/PrintStream/println(F)V\n");
+    }
+    if (strcmp(type, "string") == 0) {
+        codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+        codegen("swap\n");
+        codegen("invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
     }
 }
