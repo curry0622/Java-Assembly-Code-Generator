@@ -31,7 +31,7 @@
     }
 
     /* For debug */
-    bool debug = true;
+    bool debug = false;
 
     /* For symbol table */
     struct entry table[100];
@@ -126,10 +126,10 @@ Expression
     : Expression OR AndExpression {
         if (debug) {
             printf("Expression -> Expression OR AndExpression\n");
+            printf("OR\n");
         }
         check_type_err($1, "OR", $3);
 
-        printf("OR\n");
         $$ = "bool";
         codegen("ior\n");
     }
@@ -145,10 +145,10 @@ AndExpression
     : AndExpression AND CmpExpression {
         if (debug) {
             printf("AndExpression -> AndExpression AND CmpExpression\n");
+            printf("AND\n");
         }
         check_type_err($1, "AND", $3);
 
-        printf("AND\n");
         $$ = "bool";
         codegen("iand\n");
     }
@@ -164,10 +164,10 @@ CmpExpression
     : CmpExpression CmpOp AddExpression {
         if (debug) {
             printf("CmpExpression -> CmpExpression CmpOp AddExpression\n");
+            printf("%s\n", $2);
         }
         check_type_err($1, $2, $3);
 
-        printf("%s\n", $2);
         $$ = "bool";
         if (
             strcmp(type_correction($1), "int") == 0
@@ -210,9 +210,9 @@ AddExpression
     : AddExpression AddOp MulExpression {
         if (debug) {
             printf("AddExpression -> AddExpression AddOp MulExpression\n");
+            printf("%s\n", $2);
         }
         check_type_err($1, $2, $3);
-        printf("%s\n", $2);
         // May cause problems -> no type checking
         // if (strcmp($1, "array") == 0 && strcmp(type_correction($3), "int") == 0) {
         //     codegen("iaload\n");
@@ -258,9 +258,9 @@ MulExpression
     : MulExpression MulOp UnaryExpr {
         if (debug) {
             printf("MulExpression -> MulExpression MulOp UnaryExpr\n");
+            printf("%s\n", $2);
         }
         check_type_err($1, $2, $3);
-        printf("%s\n", $2);
         if (strcmp(type_correction($1), "float") == 0 || strcmp(type_correction($3), "float") == 0) {
             $$ = "float";
             if (strcmp($2, "MUL") == 0) {
@@ -296,8 +296,10 @@ UnaryExpr
         $$ = $1;
     }
     | UnaryOp UnaryExpr {
-        if (debug) printf("UnaryExpr -> UnaryOp UnaryExpr\n");
-        printf("%s\n", $1);
+        if (debug) {
+            printf("UnaryExpr -> UnaryOp UnaryExpr\n");
+            printf("%s\n", $1);
+        }
         $$ = $2;
         if (strcmp($1, "NOT") == 0) {
             codegen("iconst_1\n");
@@ -371,7 +373,6 @@ UnaryOp
     | NOT {
         if (debug) printf("UnaryOp -> NOT\n");
         $$ = "NOT";
-        // codegen("ixor\n");
     }
 ;
 
@@ -396,9 +397,11 @@ Operand
         $$ = $1;
     }
     | QUOTA STRING_LIT QUOTA {
-        if (debug) printf("Operand -> QUOTA STRING_LIT QUOTA\n");
+        if (debug) {
+            printf("Operand -> QUOTA STRING_LIT QUOTA\n");
+            printf("STRING_LIT %s\n", $<s_val>2);
+        }
         codegen("ldc \"%s\"\n", $<s_val>2);
-        printf("STRING_LIT %s\n", $<s_val>2);
         $$ = "string_lit";
     }
     | IDENT {
@@ -428,54 +431,70 @@ Operand
 Literal
     : INT_LIT {
         codegen("ldc %d\n", $<i_val>$);
-        printf("INT_LIT %d\n", $<i_val>$);
-        if (debug) printf("Literal -> INT_LIT\n");
+        if (debug) {
+            printf("INT_LIT %d\n", $<i_val>$);
+            printf("Literal -> INT_LIT\n");
+        }
         $$ = "int_lit";
     }
     | FLOAT_LIT {
         codegen("ldc %f\n", $<f_val>$);
-        printf("FLOAT_LIT %f\n", $<f_val>$);
-        if (debug) printf("Literal -> FLOAT_LIT\n");
+        if (debug) {
+            printf("FLOAT_LIT %f\n", $<f_val>$);
+            printf("Literal -> FLOAT_LIT\n");
+        }
         $$ = "float_lit";
     }
     | TRUE {
         codegen("iconst_1\n");
-        printf("TRUE\n");
-        if (debug) printf("Literal -> TRUE\n");
+        if (debug) {
+            printf("TRUE\n");
+            printf("Literal -> TRUE\n");
+        }
         $$ = "bool_lit";
     }
     | FALSE {
         codegen("iconst_0\n");
-        printf("FALSE\n");
-        if (debug) printf("Literal -> FALSE\n");
+        if (debug) {
+            printf("FALSE\n");
+            printf("Literal -> FALSE\n");
+        }
         $$ = "bool_lit";
     }
     | POS_INT_LIT {
         codegen("ldc %d\n", $<i_val>$);
-        printf("INT_LIT %d\n", $<i_val>$);
-        printf("POS\n");
-        if (debug) printf("Literal -> POS_INT_LIT\n");
+        if (debug) {
+            printf("INT_LIT %d\n", $<i_val>$);
+            printf("POS\n");
+            printf("Literal -> POS_INT_LIT\n");
+        }
         $$ = "int_lit";
     }
     | NEG_INT_LIT {
         codegen("ldc %d\n", $<i_val>$);
-        printf("INT_LIT %d\n", $<i_val>$);
-        printf("NEG\n");
-        if (debug) printf("Literal -> NEG_INT_LIT\n");
+        if (debug) {
+            printf("INT_LIT %d\n", $<i_val>$);
+            printf("NEG\n");
+            printf("Literal -> NEG_INT_LIT\n");
+        }
         $$ = "int_lit";
     }
     | POS_FLOAT_LIT {
         codegen("ldc %f\n", $<f_val>$);
-        printf("FLOAT_LIT %f\n", $<f_val>$);
-        printf("POS\n");
-        if (debug) printf("Literal -> FLOAT_LIT\n");
+        if (debug) {
+            printf("FLOAT_LIT %f\n", $<f_val>$);
+            printf("POS\n");
+            printf("Literal -> FLOAT_LIT\n");
+        }
         $$ = "float_lit";
     }
     | NEG_FLOAT_LIT {
         codegen("ldc %f\n", $<f_val>$);
-        printf("FLOAT_LIT %f\n", $<f_val>$);
-        printf("NEG\n");
-        if (debug) printf("Literal -> FLOAT_LIT\n");
+        if (debug) {
+            printf("FLOAT_LIT %f\n", $<f_val>$);
+            printf("NEG\n");
+            printf("Literal -> FLOAT_LIT\n");
+        }
         $$ = "float_lit";
     }
 ;
@@ -607,11 +626,13 @@ AssignmentStmt
 
 AssignmentExpr
     : AssignmentExprLeft AssignOp Expression {
-        if (debug) printf("AssignmentExpr -> Expression AssignOp Expression\n");
+        if (debug) {
+            printf("AssignmentExpr -> Expression AssignOp Expression\n");
+            printf("%s\n", $2);
+        }
         bool check = true;
         check = check_type_err($1, $2, $3);
         check = check_assign_err($1, $3);
-        printf("%s\n", $2);
         if (check) {
             if (strstr($1, "array") != NULL) {
                 if (strstr($1, "int") && strcmp(type_correction($3), "int") == 0) {
@@ -806,7 +827,10 @@ IncDecStmt
 
 IncDecExpr
     : IDENT INC {
-        if (debug) printf("IncDecExpr -> IDENT INC\n");
+        if (debug) {
+            printf("IncDecExpr -> IDENT INC\n");
+            printf("INC\n");
+        }
         int addr = lookup_symbol($1);
         if (addr != -1) {
             if (strcmp(table[addr].type, "int") == 0) {
@@ -820,10 +844,12 @@ IncDecExpr
                 codegen("fstore %d\n", addr);
             }
         }
-        printf("INC\n");
     }
     | IDENT DEC {
-        if (debug) printf("IncDecExpr -> IDENT DEC\n");
+        if (debug) {
+            printf("IncDecExpr -> IDENT DEC\n");
+            printf("DEC\n");
+        }
         int addr = lookup_symbol($1);
         if (addr != -1) {
             if (strcmp(table[addr].type, "int") == 0) {
@@ -837,7 +863,6 @@ IncDecExpr
                 codegen("fstore %d\n", addr);
             }
         }
-        printf("DEC\n");
     }
 ;
 
@@ -881,6 +906,7 @@ Condition
     : Expression {
         if (debug) printf("Condition -> Expression\n");
         if (strcmp(type_correction($1), "bool") != 0) {
+            HAS_ERROR = true;
             printf("error:%d: non-bool (type %s) used as for condition\n", yylineno + 1, type_correction($1));
         }
     }
@@ -930,8 +956,10 @@ SimpleExpr
 
 PrintStmt
     : PrintLit LPAREN Expression RPAREN SEMICOLON {
-        if (debug) printf("PrintStmt -> PRINT LPAREN Expression RPAREN SEMICOLON\n");
-        printf("PRINT %s\n", type_correction($3));
+        if (debug) {
+            printf("PrintStmt -> PRINT LPAREN Expression RPAREN SEMICOLON\n");
+            printf("PRINT %s\n", type_correction($3));
+        }
         codegen_print(type_correction($3));
         load_ident = false;
     }
@@ -994,7 +1022,9 @@ void insert_symbol(char* name, char* type, char* e_type) {
     table[curr_addr].type = type;
     table[curr_addr].e_type = e_type;
     curr_addr += 1;
-    printf("> Insert {%s} into symbol table (scope level: %d)\n", name, curr_lvl);
+    if (debug) {
+        printf("> Insert {%s} into symbol table (scope level: %d)\n", name, curr_lvl);
+    }
 }
 
 int lookup_symbol(char* name) {
@@ -1004,7 +1034,9 @@ int lookup_symbol(char* name) {
                 table[i].lvl == lvl
                 && strcmp(table[i].name, name) == 0
             ) {
-                printf("IDENT (name=%s, address=%d)\n", name, i);
+                if (debug) {
+                    printf("IDENT (name=%s, address=%d)\n", name, i);
+                }
                 // if (load_ident) {
                     if (strcmp(table[i].type, "int") == 0) {
                         codegen("iload %d\n", i);
@@ -1026,18 +1058,21 @@ int lookup_symbol(char* name) {
             }
         }
     }
+    HAS_ERROR = true;
     printf("error:%d: undefined: %s\n", yylineno, name);
     return -1;
 }
 
 void dump_table() {
-    printf("> Dump symbol table (scope level: %d)\n", curr_lvl);
-    printf("%-10s%-10s%-10s%-10s%-10s%s\n", "Index", "Name", "Type", "Address", "Lineno", "Element type");
-    int index = 0;
-    for (int i = 0; i < curr_addr; i++) {
-        if (table[i].lvl == curr_lvl) {
-            printf("%-10d%-10s%-10s%-10d%-10d%s\n", index++, table[i].name, table[i].type, table[i].addr, table[i].lineno, table[i].e_type);
-            table[i].lvl = -1;
+    if (debug) {
+        printf("> Dump symbol table (scope level: %d)\n", curr_lvl);
+        printf("%-10s%-10s%-10s%-10s%-10s%s\n", "Index", "Name", "Type", "Address", "Lineno", "Element type");
+        int index = 0;
+        for (int i = 0; i < curr_addr; i++) {
+            if (table[i].lvl == curr_lvl) {
+                printf("%-10d%-10s%-10s%-10d%-10d%s\n", index++, table[i].name, table[i].type, table[i].addr, table[i].lineno, table[i].e_type);
+                table[i].lvl = -1;
+            }
         }
     }
     curr_lvl -= 1;
@@ -1066,7 +1101,9 @@ void convert_type(char* from, char* to) {
     } else {
         to_abrv = "B";
     }
-    printf("%s to %s\n", from_abrv, to_abrv);
+    if (debug) {
+        printf("%s to %s\n", from_abrv, to_abrv);
+    }
 }
 
 void debug_table() {
@@ -1081,6 +1118,18 @@ void debug_table() {
 bool check_type_err(char* left_type, char* mid_op, char* right_type) {
     left_type = type_correction(left_type);
     right_type = type_correction(right_type);
+    if (strcmp(left_type, "arrayint") == 0) {
+        left_type = "int";
+    }
+    if (strcmp(left_type, "arrayfloat") == 0) {
+        left_type = "float";
+    }
+    if (strcmp(right_type, "arrayint") == 0) {
+        right_type = "int";
+    }
+    if (strcmp(right_type, "arrayfloat") == 0) {
+        right_type = "float";
+    }
     if (
         strcmp(left_type, right_type) != 0
         && strcmp(left_type, "undefined") != 0
@@ -1091,6 +1140,7 @@ bool check_type_err(char* left_type, char* mid_op, char* right_type) {
             || strcmp(mid_op, "SUB") == 0
             || strcmp(mid_op, "ASSIGN") == 0
         ) {
+            HAS_ERROR = true;
             printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n", yylineno, mid_op, left_type, right_type);
             return false;
         }
@@ -1101,20 +1151,24 @@ bool check_type_err(char* left_type, char* mid_op, char* right_type) {
 bool check_op_err(char* left_type, char* mid_op, char* right_type) {
     if (strcmp(mid_op, "REM") == 0) {
         if (strcmp(left_type, "int") != 0) {
+            HAS_ERROR = true;
             printf("error:%d: invalid operation: (operator REM not defined on %s)\n", yylineno, left_type);
             return false;
         }
         if (strcmp(right_type, "int") != 0) {
+            HAS_ERROR = true;
             printf("error:%d: invalid operation: (operator REM not defined on %s)\n", yylineno, right_type);
             return false;
         }
     }
     if (strcmp(mid_op, "AND") == 0 || strcmp(mid_op, "OR") == 0) {
         if (strcmp(left_type, "bool") != 0) {
+            HAS_ERROR = true;
             printf("error:%d: invalid operation: (operator %s not defined on %s)\n", yylineno, mid_op, left_type);
             return false;
         }
         if (strcmp(right_type, "bool") != 0) {
+            HAS_ERROR = true;
             printf("error:%d: invalid operation: (operator %s not defined on %s)\n", yylineno, mid_op, right_type);
             return false;
         }
@@ -1126,6 +1180,7 @@ bool check_redeclare_err(char* name) {
     for(int i = 0; i < curr_addr; i++) {
         /* Look in the same scope */
         if (table[i].lvl == curr_lvl && strcmp(table[i].name, name) == 0) {
+            HAS_ERROR = true;
             printf("error:%d: %s redeclared in this block. previous declaration at line %d\n", yylineno, name, table[i].lineno);
             return false;
         }
@@ -1152,6 +1207,7 @@ bool check_assign_err(char* left, char* right) {
         || strcmp(left, "string_lit") == 0
         || strcmp(left, "bool_lit") == 0
     ) {
+        HAS_ERROR = true;
         printf("error:%d: cannot assign to %s\n", yylineno, type_correction(left));
         return false;
     }

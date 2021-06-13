@@ -1,0 +1,13 @@
+error:3: invalid operation: ADD (mismatched types int and float)
+error:4: invalid operation: SUB (mismatched types float and int)
+error:5: invalid operation: ASSIGN (mismatched types int and float)
+error:6: invalid operation: ADD (mismatched types int and float)
+error:8: invalid operation: (operator REM not defined on float)
+error:9: invalid operation: (operator REM not defined on float)
+error:11: invalid operation: (operator AND not defined on int)
+error:12: invalid operation: (operator OR not defined on int)
+error:15: non-bool (type float) used as for condition
+error:19: non-bool (type int) used as for condition
+error:23: non-bool (type float) used as for condition
+error:27: non-bool (type int) used as for condition
+Total lines: 28
