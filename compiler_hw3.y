@@ -23,6 +23,7 @@
     int label_cnt = 0;
     bool load_ident = false;
     int ident_addr = -1;
+    int assign_ident_addr = -1;
 
     void yyerror (char const *s)
     {
@@ -80,7 +81,7 @@
 /* Nonterminal with return, which need to sepcify type */
 %type <s_val> Type TypeName
 %type <s_val> AddOp MulOp CmpOp UnaryOp AssignOp
-%type <s_val> Expression AndExpression CmpExpression AddExpression MulExpression UnaryExpr PrimaryExpr Operand IndexExpr ConversionExpr Literal
+%type <s_val> Expression AndExpression CmpExpression AddExpression MulExpression UnaryExpr PrimaryExpr Operand IndexExpr ConversionExpr Literal AssignmentExprLeft
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -499,6 +500,12 @@ ConversionExpr
         if (debug) printf("ConversionExpr -> Type LPAREN Expression RPAREN\n");
         convert_type($4, $2);
         $$ = $2;
+        if (strcmp($2, "int") == 0) {
+            codegen("f2i\n");
+        }
+        if (strcmp($2, "float") == 0) {
+            codegen("i2f\n");
+        }
     }
 ;
 
@@ -599,7 +606,7 @@ AssignmentStmt
 ;
 
 AssignmentExpr
-    : Expression AssignOp Expression {
+    : AssignmentExprLeft AssignOp Expression {
         if (debug) printf("AssignmentExpr -> Expression AssignOp Expression\n");
         bool check = true;
         check = check_type_err($1, $2, $3);
@@ -662,31 +669,31 @@ AssignmentExpr
                 && strcmp(type_correction($3), "float") == 0
             ) {
                 if (strcmp($2, "ASSIGN") == 0) {
-                    codegen("fstore %d\n", ident_addr);
+                    codegen("fstore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "ADD_ASSIGN") == 0) {
-                    codegen("fload %d\n", ident_addr);
+                    codegen("fload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("fadd\n");
-                    codegen("fstore %d\n", ident_addr);
+                    codegen("fstore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "SUB_ASSIGN") == 0) {
-                    codegen("fload %d\n", ident_addr);
+                    codegen("fload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("fsub\n");
-                    codegen("fstore %d\n", ident_addr);
+                    codegen("fstore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "MUL_ASSIGN") == 0) {
-                    codegen("fload %d\n", ident_addr);
+                    codegen("fload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("fmul\n");
-                    codegen("fstore %d\n", ident_addr);
+                    codegen("fstore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "QUO_ASSIGN") == 0) {
-                    codegen("fload %d\n", ident_addr);
+                    codegen("fload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("fdiv\n");
-                    codegen("fstore %d\n", ident_addr);
+                    codegen("fstore %d\n", assign_ident_addr);
                 }
             }
             // For type: int
@@ -695,37 +702,37 @@ AssignmentExpr
                 && strcmp(type_correction($3), "int") == 0
             ) {
                 if (strcmp($2, "ASSIGN") == 0) {
-                    codegen("istore %d\n", ident_addr);
+                    codegen("istore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "ADD_ASSIGN") == 0) {
-                    codegen("iload %d\n", ident_addr);
+                    codegen("iload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("iadd\n");
-                    codegen("istore %d\n", ident_addr);
+                    codegen("istore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "SUB_ASSIGN") == 0) {
-                    codegen("iload %d\n", ident_addr);
+                    codegen("iload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("isub\n");
-                    codegen("istore %d\n", ident_addr);
+                    codegen("istore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "MUL_ASSIGN") == 0) {
-                    codegen("iload %d\n", ident_addr);
+                    codegen("iload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("imul\n");
-                    codegen("istore %d\n", ident_addr);
+                    codegen("istore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "QUO_ASSIGN") == 0) {
-                    codegen("iload %d\n", ident_addr);
+                    codegen("iload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("idiv\n");
-                    codegen("istore %d\n", ident_addr);
+                    codegen("istore %d\n", assign_ident_addr);
                 }
                 if (strcmp($2, "REM_ASSIGN") == 0) {
-                    codegen("iload %d\n", ident_addr);
+                    codegen("iload %d\n", assign_ident_addr);
                     codegen("swap\n");
                     codegen("irem\n");
-                    codegen("istore %d\n", ident_addr);
+                    codegen("istore %d\n", assign_ident_addr);
                 }
             }
             // For type: string
@@ -734,7 +741,7 @@ AssignmentExpr
                 && strcmp(type_correction($3), "string") == 0
             ) {
                 if (strcmp($2, "ASSIGN") == 0) {
-                    codegen("astore %d\n", ident_addr);
+                    codegen("astore %d\n", assign_ident_addr);
                 }
             }
             // For type: bool
@@ -743,11 +750,18 @@ AssignmentExpr
                 && strcmp(type_correction($3), "bool") == 0
             ) {
                 if (strcmp($2, "ASSIGN") == 0) {
-                    codegen("istore %d\n", ident_addr);
+                    codegen("istore %d\n", assign_ident_addr);
                 }
             }
         }
         load_ident = false;
+    }
+;
+
+AssignmentExprLeft
+    : Expression {
+        $$ = $1;
+        assign_ident_addr = ident_addr;
     }
 ;
 
