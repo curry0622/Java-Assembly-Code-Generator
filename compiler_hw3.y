@@ -21,7 +21,8 @@
     bool HAS_ERROR = false;
     int INDENT = 0;
     int label_cnt = 0;
-    bool assign_right = false;
+    bool load_ident = false;
+    int ident_addr = -1;
 
     void yyerror (char const *s)
     {
@@ -49,7 +50,7 @@
     static bool check_op_err();
     static bool check_redeclare_err();
     static char* type_correction();
-    static void check_assign_err();
+    static bool check_assign_err();
 
     /* Code generate */
     static void codegen_print();
@@ -403,6 +404,7 @@ Operand
         int addr = lookup_symbol($1);
         if (debug) printf("Operand -> IDENT\n");
         if (addr != -1) {
+            ident_addr = addr;
             if (strcmp(table[addr].type, "array") == 0) {
                 char tmp[20];
                 strcpy(tmp, table[addr].type);
@@ -412,6 +414,7 @@ Operand
                 $$ = table[addr].type;
             }
         } else {
+            ident_addr = -1;
             $$ = "undefined";
         }
     }
@@ -480,7 +483,7 @@ IndexExpr
     : PrimaryExpr LBRACK Expression RBRACK {
         if (debug) printf("IndexExpr -> PrimaryExpr LBRACK Expression RBRACK\n");
         $$ = $1;
-        if (assign_right && strstr($1, "array") != NULL) {
+        if (load_ident && strstr($1, "array") != NULL) {
             if (strstr($1, "int") != NULL) {
                 codegen("iaload\n");
             }
@@ -543,12 +546,21 @@ DeclarationStmt
         if (debug) printf("DeclarationStmt -> Type IDENT SEMICOLON\n");
         if (check_redeclare_err($2)) {
             insert_symbol($2, $1, "-");
-            codegen("ldc 0\n");
             if (strcmp($1, "int") == 0) {
+                codegen("ldc 0\n");
                 codegen("istore %d\n", curr_addr - 1);
             }
             if (strcmp($1, "float") == 0) {
+                codegen("ldc 0.000000\n");
                 codegen("fstore %d\n", curr_addr - 1);
+            }
+            if (strcmp($1, "string") == 0) {
+                codegen("ldc \"\"\n");
+                codegen("astore %d\n", curr_addr - 1);
+            }
+            if (strcmp($1, "bool") == 0) {
+                codegen("iconst_1");
+                codegen("istore %d\n", curr_addr - 1);
             }
         }
     }
@@ -561,6 +573,12 @@ DeclarationStmt
             }
             if (strcmp($1, "float") == 0) {
                 codegen("fstore %d\n", curr_addr - 1);
+            }
+            if (strcmp($1, "string") == 0) {
+                codegen("astore %d\n", curr_addr - 1);
+            }
+            if (strcmp($1, "bool") == 0) {
+                codegen("istore %d\n", curr_addr - 1);
             }
         }
     }
@@ -583,18 +601,153 @@ AssignmentStmt
 AssignmentExpr
     : Expression AssignOp Expression {
         if (debug) printf("AssignmentExpr -> Expression AssignOp Expression\n");
-        check_type_err($1, $2, $3);
-        check_assign_err($1, $3);
+        bool check = true;
+        check = check_type_err($1, $2, $3);
+        check = check_assign_err($1, $3);
         printf("%s\n", $2);
-        if (strstr($1, "array") != NULL) {
-            if (strstr($1, "int") && strcmp(type_correction($3), "int") == 0) {
-                codegen("iastore\n");
+        if (check) {
+            if (strstr($1, "array") != NULL) {
+                if (strstr($1, "int") && strcmp(type_correction($3), "int") == 0) {
+                    if (strcmp($2, "ASSIGN") == 0) {
+                        codegen("iastore\n");
+                    }
+                    // will cause error because of not loading array
+                    // if (strcmp($2, "ADD_ASSIGN") == 0) {
+                    //     codegen("iadd\n");
+                    //     codegen("iastore\n");
+                    // }
+                    // if (strcmp($2, "SUB_ASSIGN") == 0) {
+                    //     codegen("isub\n");
+                    //     codegen("iastore\n");
+                    // }
+                    // if (strcmp($2, "MUL_ASSIGN") == 0) {
+                    //     codegen("imul\n");
+                    //     codegen("iastore\n");
+                    // }
+                    // if (strcmp($2, "QUO_ASSIGN") == 0) {
+                    //     codegen("idiv\n");
+                    //     codegen("iastore\n");
+                    // }
+                    // if (strcmp($2, "REM_ASSIGN") == 0) {
+                    //     codegen("irem\n");
+                    //     codegen("iastore\n");
+                    // }
+                }
+                if (strstr($1, "float") && strcmp(type_correction($3), "float") == 0) {
+                    if (strcmp($2, "ASSIGN") == 0) {
+                        codegen("fastore\n");
+                    }
+                    // will cause error because of not loading array
+                    // if (strcmp($2, "ADD_ASSIGN") == 0) {
+                    //     codegen("fadd\n");
+                    //     codegen("fastore\n");
+                    // }
+                    // if (strcmp($2, "SUB_ASSIGN") == 0) {
+                    //     codegen("fsub\n");
+                    //     codegen("fastore\n");
+                    // }
+                    // if (strcmp($2, "MUL_ASSIGN") == 0) {
+                    //     codegen("fmul\n");
+                    //     codegen("fastore\n");
+                    // }
+                    // if (strcmp($2, "QUO_ASSIGN") == 0) {
+                    //     codegen("fdiv\n");
+                    //     codegen("fastore\n");
+                    // }
+                }
             }
-            if (strstr($1, "float") && strcmp(type_correction($3), "float") == 0) {
-                codegen("fastore\n");
+            // For type: float
+            if (
+                strcmp(type_correction($1), "float") == 0
+                && strcmp(type_correction($3), "float") == 0
+            ) {
+                if (strcmp($2, "ASSIGN") == 0) {
+                    codegen("fstore %d\n", ident_addr);
+                }
+                if (strcmp($2, "ADD_ASSIGN") == 0) {
+                    codegen("fload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("fadd\n");
+                    codegen("fstore %d\n", ident_addr);
+                }
+                if (strcmp($2, "SUB_ASSIGN") == 0) {
+                    codegen("fload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("fsub\n");
+                    codegen("fstore %d\n", ident_addr);
+                }
+                if (strcmp($2, "MUL_ASSIGN") == 0) {
+                    codegen("fload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("fmul\n");
+                    codegen("fstore %d\n", ident_addr);
+                }
+                if (strcmp($2, "QUO_ASSIGN") == 0) {
+                    codegen("fload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("fdiv\n");
+                    codegen("fstore %d\n", ident_addr);
+                }
+            }
+            // For type: int
+            if (
+                strcmp(type_correction($1), "int") == 0
+                && strcmp(type_correction($3), "int") == 0
+            ) {
+                if (strcmp($2, "ASSIGN") == 0) {
+                    codegen("istore %d\n", ident_addr);
+                }
+                if (strcmp($2, "ADD_ASSIGN") == 0) {
+                    codegen("iload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("iadd\n");
+                    codegen("istore %d\n", ident_addr);
+                }
+                if (strcmp($2, "SUB_ASSIGN") == 0) {
+                    codegen("iload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("isub\n");
+                    codegen("istore %d\n", ident_addr);
+                }
+                if (strcmp($2, "MUL_ASSIGN") == 0) {
+                    codegen("iload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("imul\n");
+                    codegen("istore %d\n", ident_addr);
+                }
+                if (strcmp($2, "QUO_ASSIGN") == 0) {
+                    codegen("iload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("idiv\n");
+                    codegen("istore %d\n", ident_addr);
+                }
+                if (strcmp($2, "REM_ASSIGN") == 0) {
+                    codegen("iload %d\n", ident_addr);
+                    codegen("swap\n");
+                    codegen("irem\n");
+                    codegen("istore %d\n", ident_addr);
+                }
+            }
+            // For type: string
+            if (
+                strcmp(type_correction($1), "string") == 0
+                && strcmp(type_correction($3), "string") == 0
+            ) {
+                if (strcmp($2, "ASSIGN") == 0) {
+                    codegen("astore %d\n", ident_addr);
+                }
+            }
+            // For type: bool
+            if (
+                strcmp(type_correction($1), "bool") == 0
+                && strcmp(type_correction($3), "bool") == 0
+            ) {
+                if (strcmp($2, "ASSIGN") == 0) {
+                    codegen("istore %d\n", ident_addr);
+                }
             }
         }
-        assign_right = false;
+        load_ident = false;
     }
 ;
 
@@ -602,32 +755,32 @@ AssignOp
     : ASSIGN {
         if (debug) printf("AssignOp -> ASSIGN\n");
         $$ = "ASSIGN";
-        assign_right = true;
+        load_ident = true;
     }
     | ADD_ASSIGN {
         if (debug) printf("AssignOp -> ADD_ASSIGN\n");
         $$ = "ADD_ASSIGN";
-        assign_right = true;
+        load_ident = true;
     }
     | SUB_ASSIGN {
         if (debug) printf("AssignOp -> SUB_ASSIGN\n");
         $$ = "SUB_ASSIGN";
-        assign_right = true;
+        load_ident = true;
     }
     | MUL_ASSIGN {
         if (debug) printf("AssignOp -> MUL_ASSIGN\n");
         $$ = "MUL_ASSIGN";
-        assign_right = true;
+        load_ident = true;
     }
     | QUO_ASSIGN {
         if (debug) printf("AssignOp -> QUO_ASSIGN\n");
         $$ = "QUO_ASSIGN";
-        assign_right = true;
+        load_ident = true;
     }
     | REM_ASSIGN {
         if (debug) printf("AssignOp -> REM_ASSIGN\n");
         $$ = "REM_ASSIGN";
-        assign_right = true;
+        load_ident = true;
     }
 ;
 
@@ -762,10 +915,17 @@ SimpleExpr
 ;
 
 PrintStmt
-    : PRINT LPAREN Expression RPAREN SEMICOLON {
+    : PrintLit LPAREN Expression RPAREN SEMICOLON {
         if (debug) printf("PrintStmt -> PRINT LPAREN Expression RPAREN SEMICOLON\n");
         printf("PRINT %s\n", type_correction($3));
         codegen_print(type_correction($3));
+        load_ident = false;
+    }
+;
+
+PrintLit
+    : PRINT {
+        load_ident = true;
     }
 ;
 
@@ -831,19 +991,24 @@ int lookup_symbol(char* name) {
                 && strcmp(table[i].name, name) == 0
             ) {
                 printf("IDENT (name=%s, address=%d)\n", name, i);
-                if (strcmp(table[i].type, "int") == 0) {
-                    codegen("iload %d\n", i);
-                }
-                if (strcmp(table[i].type, "float") == 0) {
-                    codegen("fload %d\n", i);
-                }
-                if (strcmp(table[i].type, "array") == 0) {
-                    codegen("aload %d\n", i);
-                }
+                // if (load_ident) {
+                    if (strcmp(table[i].type, "int") == 0) {
+                        codegen("iload %d\n", i);
+                    }
+                    if (strcmp(table[i].type, "float") == 0) {
+                        codegen("fload %d\n", i);
+                    }
+                    if (strcmp(table[i].type, "string") == 0) {
+                        codegen("aload %d\n", i);
+                    }
+                    if (strcmp(table[i].type, "bool") == 0) {
+                        codegen("iload %d\n", i);
+                    }
+                    if (strcmp(table[i].type, "array") == 0) {
+                        codegen("aload %d\n", i);
+                    }
+                // }
                 return i;
-                // if (strcmp(table[i].type, "array") == 0)
-                //     return table[i].e_type;
-                // return table[i].type;
             }
         }
     }
@@ -966,7 +1131,7 @@ char* type_correction(char* type) {
     return type;
 }
 
-void check_assign_err(char* left, char* right) {
+bool check_assign_err(char* left, char* right) {
     if (
         strcmp(left, "int_lit") == 0
         || strcmp(left, "float_lit") == 0
@@ -974,7 +1139,9 @@ void check_assign_err(char* left, char* right) {
         || strcmp(left, "bool_lit") == 0
     ) {
         printf("error:%d: cannot assign to %s\n", yylineno, type_correction(left));
+        return false;
     }
+    return true;
 }
 
 /* For code generation */
