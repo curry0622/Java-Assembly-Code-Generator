@@ -21,6 +21,7 @@
     bool HAS_ERROR = false;
     int INDENT = 0;
     int label_cnt = 0;
+    bool assign_right = false;
 
     void yyerror (char const *s)
     {
@@ -28,7 +29,7 @@
     }
 
     /* For debug */
-    bool debug = false;
+    bool debug = true;
 
     /* For symbol table */
     struct entry table[100];
@@ -210,7 +211,21 @@ AddExpression
         }
         check_type_err($1, $2, $3);
         printf("%s\n", $2);
-        if (strcmp(type_correction($1), "float") == 0 || strcmp(type_correction($3), "float") == 0) {
+        // May cause problems -> no type checking
+        // if (strcmp($1, "array") == 0 && strcmp(type_correction($3), "int") == 0) {
+        //     codegen("iaload\n");
+        // }
+        // if (strcmp($1, "array") == 0 && strcmp(type_correction($3), "float") == 0) {
+        //     codegen("faload\n");
+        // }
+        // if (strcmp($3, "array") == 0 && strcmp(type_correction($1), "int") == 0) {
+        //     codegen("iaload\n");
+        // }
+        // if (strcmp($3, "array") == 0 && strcmp(type_correction($1), "float") == 0) {
+        //     codegen("faload\n");
+        // }
+        // printf("====================%s\n", $1);
+        if (strstr($1, "float") != NULL && strstr($3, "float") != NULL) {
             $$ = "float";
             if (strcmp($2, "ADD") == 0) {
                 codegen("fadd\n");
@@ -218,7 +233,8 @@ AddExpression
             if (strcmp($2, "SUB") == 0) {
                 codegen("fsub\n");
             }
-        } else {
+        }
+        if (strstr($1, "int") != NULL && strstr($3, "int") != NULL) {
             $$ = "int";
             if (strcmp($2, "ADD") == 0) {
                 codegen("iadd\n");
@@ -386,7 +402,18 @@ Operand
     | IDENT {
         int addr = lookup_symbol($1);
         if (debug) printf("Operand -> IDENT\n");
-        $$ = addr != -1 ? table[addr].type : "undefined";
+        if (addr != -1) {
+            if (strcmp(table[addr].type, "array") == 0) {
+                char tmp[20];
+                strcpy(tmp, table[addr].type);
+                strcat(tmp, table[addr].e_type);
+                $$ = tmp;
+            } else {
+                $$ = table[addr].type;
+            }
+        } else {
+            $$ = "undefined";
+        }
     }
     | LPAREN Expression RPAREN {
         if (debug) printf("Operand -> LPAREN Expression RPAREN\n");
@@ -453,6 +480,14 @@ IndexExpr
     : PrimaryExpr LBRACK Expression RBRACK {
         if (debug) printf("IndexExpr -> PrimaryExpr LBRACK Expression RBRACK\n");
         $$ = $1;
+        if (assign_right && strstr($1, "array") != NULL) {
+            if (strstr($1, "int") != NULL) {
+                codegen("iaload\n");
+            }
+            if (strstr($1, "float") != NULL) {
+                codegen("faload\n");
+            }
+        }
     }
 ;
 
@@ -533,7 +568,7 @@ DeclarationStmt
         if (debug) printf("DeclarationStmt -> Type IDENT LBRACK Expression RBRACK SEMICOLON\n");
         if (check_redeclare_err($2)) {
             insert_symbol($2, "array", $1);
-            codegen("newarray %s", $1);
+            codegen("newarray %s\n", $1);
             codegen("astore %d\n", curr_addr - 1);
         }
     }
@@ -551,6 +586,15 @@ AssignmentExpr
         check_type_err($1, $2, $3);
         check_assign_err($1, $3);
         printf("%s\n", $2);
+        if (strstr($1, "array") != NULL) {
+            if (strstr($1, "int") && strcmp(type_correction($3), "int") == 0) {
+                codegen("iastore\n");
+            }
+            if (strstr($1, "float") && strcmp(type_correction($3), "float") == 0) {
+                codegen("fastore\n");
+            }
+        }
+        assign_right = false;
     }
 ;
 
@@ -558,26 +602,32 @@ AssignOp
     : ASSIGN {
         if (debug) printf("AssignOp -> ASSIGN\n");
         $$ = "ASSIGN";
+        assign_right = true;
     }
     | ADD_ASSIGN {
         if (debug) printf("AssignOp -> ADD_ASSIGN\n");
         $$ = "ADD_ASSIGN";
+        assign_right = true;
     }
     | SUB_ASSIGN {
         if (debug) printf("AssignOp -> SUB_ASSIGN\n");
         $$ = "SUB_ASSIGN";
+        assign_right = true;
     }
     | MUL_ASSIGN {
         if (debug) printf("AssignOp -> MUL_ASSIGN\n");
         $$ = "MUL_ASSIGN";
+        assign_right = true;
     }
     | QUO_ASSIGN {
         if (debug) printf("AssignOp -> QUO_ASSIGN\n");
         $$ = "QUO_ASSIGN";
+        assign_right = true;
     }
     | REM_ASSIGN {
         if (debug) printf("AssignOp -> REM_ASSIGN\n");
         $$ = "REM_ASSIGN";
+        assign_right = true;
     }
 ;
 
@@ -782,10 +832,13 @@ int lookup_symbol(char* name) {
             ) {
                 printf("IDENT (name=%s, address=%d)\n", name, i);
                 if (strcmp(table[i].type, "int") == 0) {
-                    codegen("iload %d\n", table[i].addr);
+                    codegen("iload %d\n", i);
                 }
                 if (strcmp(table[i].type, "float") == 0) {
-                    codegen("fload %d\n", table[i].addr);
+                    codegen("fload %d\n", i);
+                }
+                if (strcmp(table[i].type, "array") == 0) {
+                    codegen("aload %d\n", i);
                 }
                 return i;
                 // if (strcmp(table[i].type, "array") == 0)
@@ -951,5 +1004,19 @@ void codegen_print(char* type) {
         codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
         codegen("swap\n");
         codegen("invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+    }
+    if (strstr(type, "array") != NULL) {
+        if (strstr(type, "int") != NULL) {
+            codegen("iaload\n");
+            codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+            codegen("swap\n");
+            codegen("invokevirtual java/io/PrintStream/print(I)V\n");
+        }
+        if (strstr(type, "float") != NULL) {
+            codegen("faload\n");
+            codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+            codegen("swap\n");
+            codegen("invokevirtual java/io/PrintStream/print(F)V\n");
+        }
     }
 }
