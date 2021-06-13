@@ -1174,13 +1174,11 @@ void codegen_print(char* type) {
     }
     if (strstr(type, "array") != NULL) {
         if (strstr(type, "int") != NULL) {
-            codegen("iaload\n");
             codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
             codegen("swap\n");
             codegen("invokevirtual java/io/PrintStream/print(I)V\n");
         }
         if (strstr(type, "float") != NULL) {
-            codegen("faload\n");
             codegen("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
             codegen("swap\n");
             codegen("invokevirtual java/io/PrintStream/print(F)V\n");

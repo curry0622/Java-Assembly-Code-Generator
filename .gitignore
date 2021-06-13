@@ -5,3 +5,4 @@ mycompiler
 y.output
 y.tab.c
 y.tab.h
+*.log
